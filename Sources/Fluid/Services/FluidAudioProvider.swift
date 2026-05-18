@@ -177,10 +177,14 @@ final class FluidAudioProvider: TranscriptionProvider {
         }
 
         let startedAt = Date().timeIntervalSince1970
-        let slidingManager = try await self.ensureSlidingWindowManager()
-        let delta = try await self.consumeStreamingDelta(from: samples)
-        if !delta.isEmpty {
-            try await slidingManager.streamAudio(self.createPCMBuffer(from: delta))
+        if SettingsStore.shared.parakeetFinalizationMode == .tokenTimedChunkMerge {
+            let slidingManager = try await self.ensureSlidingWindowManager()
+            let delta = try await self.consumeStreamingDelta(from: samples)
+            if !delta.isEmpty {
+                try await slidingManager.streamAudio(self.createPCMBuffer(from: delta))
+            }
+        } else if self.slidingWindowManager != nil {
+            await self.cancelSlidingWindowFinalState()
         }
         let result = try await fullPreviewManager.transcribe(samples, source: AudioSource.microphone)
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -188,11 +192,12 @@ final class FluidAudioProvider: TranscriptionProvider {
         let elapsedMs = Int(((Date().timeIntervalSince1970 - startedAt) * 1000).rounded())
         let audioMs = Int((Double(samples.count) / 16_000.0 * 1000).rounded())
         let rtf = audioMs > 0 ? Double(elapsedMs) / Double(audioMs) : 0
+        let finalizationMode = SettingsStore.shared.parakeetFinalizationMode.rawValue
         DebugLogger.shared.info(
             """
             ASR_BENCH provider_streaming_done samples=\(samples.count) audioMs=\(audioMs) \
             elapsedMs=\(elapsedMs) textChars=\(text.trimmingCharacters(in: .whitespacesAndNewlines).count) \
-            rtf=\(String(format: "%.3f", rtf))
+            rtf=\(String(format: "%.3f", rtf)) finalizationMode=\(finalizationMode)
             """,
             source: "ASRBenchmark"
         )
@@ -209,18 +214,22 @@ final class FluidAudioProvider: TranscriptionProvider {
         }
 
         let startedAt = Date().timeIntervalSince1970
-        do {
-            if let slidingResult = try await self.finishSlidingWindowTranscription(samples) {
-                if self.shouldUseSlidingWindowFinal(slidingResult.text) {
-                    self.logFinalBenchmark(samples: samples, text: slidingResult.text, startedAt: startedAt, usedFallback: false)
-                    return slidingResult
+        if SettingsStore.shared.parakeetFinalizationMode == .tokenTimedChunkMerge {
+            do {
+                if let slidingResult = try await self.finishSlidingWindowTranscription(samples) {
+                    if self.shouldUseSlidingWindowFinal(slidingResult.text) {
+                        self.logFinalBenchmark(samples: samples, text: slidingResult.text, startedAt: startedAt, usedFallback: false)
+                        return slidingResult
+                    }
                 }
+            } catch {
+                DebugLogger.shared.warning(
+                    "ASR_BENCH provider_sliding_rejected reason=error error=\(error.localizedDescription)",
+                    source: "ASRBenchmark"
+                )
             }
-        } catch {
-            DebugLogger.shared.warning(
-                "ASR_BENCH provider_sliding_rejected reason=error error=\(error.localizedDescription)",
-                source: "ASRBenchmark"
-            )
+        } else {
+            await self.cancelSlidingWindowFinalState()
         }
 
         // If the boosted final manager fails, fall back to the unboosted streaming
@@ -269,6 +278,12 @@ final class FluidAudioProvider: TranscriptionProvider {
         self.streamedSampleCount = 0
         self.latestStreamingPreviewText = ""
         return manager
+    }
+
+    private func cancelSlidingWindowFinalState() async {
+        await self.slidingWindowManager?.cancel()
+        self.slidingWindowManager = nil
+        self.streamedSampleCount = 0
     }
 
     private func consumeStreamingDelta(from samples: [Float]) async throws -> [Float] {
@@ -443,11 +458,12 @@ final class FluidAudioProvider: TranscriptionProvider {
         let elapsedMs = Int(((Date().timeIntervalSince1970 - startedAt) * 1000).rounded())
         let audioMs = Int((Double(samples.count) / 16_000.0 * 1000).rounded())
         let rtf = audioMs > 0 ? Double(elapsedMs) / Double(audioMs) : 0
+        let finalizationMode = SettingsStore.shared.parakeetFinalizationMode.rawValue
         DebugLogger.shared.info(
             """
             ASR_BENCH provider_final_done samples=\(samples.count) audioMs=\(audioMs) \
             elapsedMs=\(elapsedMs) textChars=\(text.trimmingCharacters(in: .whitespacesAndNewlines).count) \
-            rtf=\(String(format: "%.3f", rtf)) fallback=\(usedFallback)
+            rtf=\(String(format: "%.3f", rtf)) fallback=\(usedFallback) finalizationMode=\(finalizationMode)
             """,
             source: "ASRBenchmark"
         )

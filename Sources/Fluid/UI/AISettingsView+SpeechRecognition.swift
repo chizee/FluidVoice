@@ -158,6 +158,10 @@ extension VoiceEngineSettingsView {
 
                         // Filler Words Section
                         self.fillerWordsSection
+
+                        if self.settings.selectedSpeechModel == .parakeetTDT || self.settings.selectedSpeechModel == .parakeetTDTv2 {
+                            self.parakeetDevelopmentSection
+                        }
                     }
                 }
             }
@@ -673,6 +677,55 @@ extension VoiceEngineSettingsView {
                 FillerWordsEditor()
             }
         }
+    }
+
+    var parakeetDevelopmentSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "flask")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Text("Under Development")
+                    .font(.body)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dictation Speed")
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                    Text(self.viewModel.parakeetFinalizationMode.detailText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 8)
+
+                Picker("", selection: self.$viewModel.parakeetFinalizationMode) {
+                    ForEach(ParakeetFinalizationMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 260)
+                .disabled(self.viewModel.asr.isRunning)
+                .onChange(of: self.viewModel.parakeetFinalizationMode) { _, newValue in
+                    self.settings.parakeetFinalizationMode = newValue
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.orange.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(.orange.opacity(0.22), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - Speech Model Logo View

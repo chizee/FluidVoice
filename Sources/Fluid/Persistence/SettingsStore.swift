@@ -1304,6 +1304,16 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    var parakeetFinalizationMode: ParakeetFinalizationMode {
+        get {
+            self.defaults.string(forKey: Keys.parakeetFinalizationMode).flatMap(ParakeetFinalizationMode.init(rawValue:)) ?? .stableFullFinal
+        }
+        set {
+            objectWillChange.send()
+            self.defaults.set(newValue.rawValue, forKey: Keys.parakeetFinalizationMode)
+        }
+    }
+
     var copyTranscriptionToClipboard: Bool {
         get { self.defaults.bool(forKey: Keys.copyTranscriptionToClipboard) }
         set { self.defaults.set(newValue, forKey: Keys.copyTranscriptionToClipboard) }
@@ -3616,6 +3626,7 @@ private extension SettingsStore {
         static let hotkeyMode = "HotkeyMode"
         static let enableStreamingPreview = "EnableStreamingPreview"
         static let enableAIStreaming = "EnableAIStreaming"
+        static let parakeetFinalizationMode = "ParakeetFinalizationMode"
         static let copyTranscriptionToClipboard = "CopyTranscriptionToClipboard"
         static let textInsertionMode = "TextInsertionMode"
         static let autoUpdateCheckEnabled = "AutoUpdateCheckEnabled"

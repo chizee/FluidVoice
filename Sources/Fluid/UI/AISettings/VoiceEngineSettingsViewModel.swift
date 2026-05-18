@@ -27,6 +27,7 @@ final class VoiceEngineSettingsViewModel: ObservableObject {
     @Published var downloadProgress: Double = 0.0
 
     @Published var removeFillerWordsEnabled: Bool
+    @Published var parakeetFinalizationMode: ParakeetFinalizationMode
 
     init(settings: SettingsStore, appServices: AppServices) {
         self.settings = settings
@@ -34,12 +35,14 @@ final class VoiceEngineSettingsViewModel: ObservableObject {
         self.previewSpeechModel = settings.selectedSpeechModel
         self.selectedSpeechProvider = settings.selectedSpeechModel.provider
         self.removeFillerWordsEnabled = settings.removeFillerWordsEnabled
+        self.parakeetFinalizationMode = settings.parakeetFinalizationMode
     }
 
     func onAppear() {
         self.previewSpeechModel = self.settings.selectedSpeechModel
         self.selectedSpeechProvider = self.settings.selectedSpeechModel.provider
         self.removeFillerWordsEnabled = self.settings.removeFillerWordsEnabled
+        self.parakeetFinalizationMode = self.settings.parakeetFinalizationMode
 
         Task {
             await self.asr.checkIfModelsExistAsync()
