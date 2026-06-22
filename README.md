@@ -45,29 +45,34 @@ We're keeping Fluid Intelligence private for now so we can sustainably offer the
 
 ---
 
-## Fluid Intelligence in Action
+## Fluid Intelligence Sneak Peek
 
-### Email Template
-
-https://github.com/user-attachments/assets/6c7a7c4c-17a8-453d-8eff-1aa1fa9f6077
-
-### Flowers
-
-https://github.com/user-attachments/assets/36747e9d-1ea3-4d27-8d38-eaacb6d57285
-
-### Change Time & Name
-
-https://github.com/user-attachments/assets/04e00f3d-a602-448d-9bde-50b5e8f61ac6
-
-### Emoji
-
-https://github.com/user-attachments/assets/5f6063ab-0506-4687-b825-c7bf4ab66ed6
-
-### Hyphens & Numbers
-
-https://github.com/user-attachments/assets/47175f2b-9f06-452e-b892-42488e4ba536
-
----
+<table>
+  <tr>
+    <td width="50%" align="center"><b>Email Template</b></td>
+    <td width="50%" align="center"><b>Flowers</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><video src="https://github.com/user-attachments/assets/6c7a7c4c-17a8-453d-8eff-1aa1fa9f6077" width="100%"></video></td>
+    <td width="50%"><video src="https://github.com/user-attachments/assets/36747e9d-1ea3-4d27-8d38-eaacb6d57285" width="100%"></video></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><b>Change Time & Name</b></td>
+    <td width="50%" align="center"><b>Emoji</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><video src="https://github.com/user-attachments/assets/04e00f3d-a602-448d-9bde-50b5e8f61ac6" width="100%"></video></td>
+    <td width="50%"><video src="https://github.com/user-attachments/assets/5f6063ab-0506-4687-b825-c7bf4ab66ed6" width="100%"></video></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><b>Hyphens & Numbers</b></td>
+    <td width="50%"></td>
+  </tr>
+  <tr>
+    <td width="50%"><video src="https://github.com/user-attachments/assets/47175f2b-9f06-452e-b892-42488e4ba536" width="100%"></video></td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ## Demo
 
@@ -88,10 +93,6 @@ https://github.com/user-attachments/assets/c57ef6d5-f0a1-4a3f-a121-637533442c24
 ### History & Stats
 
 ![History & Stats](assets/history__ss.png)
-
-### Fluid Intelligence Sneak Peek
-
-![Fluid Intelligence Sneak Peek](assets/fluid_intelligence_local.png)
 
 ---
 
