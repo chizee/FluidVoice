@@ -186,6 +186,7 @@ SettingsStore.xcuserstate
 .mcp_temp/
 
 # Build and release scripts (developer-specific)
+build_*
 build_dev.sh
 build_and_notarize.sh
 release.sh

@@ -6,7 +6,9 @@
 //  Created: 2025-12-21
 //
 
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct CustomDictionaryView: View {
     @Environment(\.theme) private var theme
@@ -17,26 +19,23 @@ struct CustomDictionaryView: View {
     @State private var showAddBoostSheet = false
     @State private var editingBoostTerm: EditableBoostTerm?
 
-    // Collapsible section states
-    @State private var isInstantReplacementSectionExpanded = true
-    @State private var isAISectionExpanded = true
-
     @State private var boostStatusMessage = "Add custom words for better Parakeet recognition."
     @State private var boostHasError = false
     @State private var vocabBoostingEnabled: Bool = SettingsStore.shared.vocabularyBoostingEnabled
+    @State private var isBoostingInfoPresented = false
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: self.theme.metrics.spacing.xl) {
                 self.pageHeader
 
-                // Section 1: Instant Replacement
-                self.instantReplacementSection
-
-                // Section 2: Custom Words (Parakeet)
-                self.aiPostProcessingSection
+                VStack(alignment: .leading, spacing: self.theme.metrics.spacing.xxl) {
+                    self.instantReplacementSection
+                    self.aiPostProcessingSection
+                }
             }
-            .padding(20)
+            .frame(maxWidth: 860, alignment: .leading)
+            .padding(self.theme.metrics.spacing.xl)
         }
         .sheet(isPresented: self.$showAddSheet) {
             AddDictionaryEntrySheet(existingTriggers: self.allExistingTriggers()) { newEntry in
@@ -79,186 +78,107 @@ struct CustomDictionaryView: View {
     // MARK: - Page Header
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "text.book.closed.fill")
-                    .font(.title2)
-                    .foregroundStyle(self.theme.palette.accent)
+        HStack(alignment: .center, spacing: self.theme.metrics.spacing.md) {
+            self.settingsIconTile(systemName: "text.book.closed.fill")
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Custom Dictionary")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(self.theme.typography.title)
+                Text("Correct recurring mistakes and teach the voice engine the words you use.")
+                    .font(self.theme.typography.bodySmall)
+                    .foregroundStyle(self.theme.palette.secondaryText)
             }
 
-            Text("Fix recurring transcription mistakes with Instant Replacement, or add Custom Words for names and product terms.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Spacer(minLength: self.theme.metrics.spacing.md)
+
+            HStack(spacing: self.theme.metrics.spacing.sm) {
+                Button(action: self.importDictionary) {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                }
+                .fluidButton(.compact, size: .compact)
+
+                Button(action: self.exportDictionary) {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .fluidButton(.compact, size: .compact)
+            }
         }
     }
 
-    // MARK: - Section 1: Instant Replacement
+    private func settingsIconTile(systemName: String) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: self.theme.metrics.corners.md, style: .continuous)
+                .fill(self.theme.palette.contentBackground.opacity(0.82))
+                .overlay(
+                    LinearGradient(
+                        colors: [.white.opacity(0.1), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: self.theme.metrics.corners.md, style: .continuous))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: self.theme.metrics.corners.md, style: .continuous)
+                        .stroke(self.theme.palette.accent.opacity(0.35), lineWidth: 1)
+                )
+
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(self.theme.palette.accent)
+        }
+        .frame(width: 34, height: 34)
+    }
+
+    // MARK: - Instant Replacement
 
     private var instantReplacementSection: some View {
-        ThemedCard(hoverEffect: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                // Collapsible Header
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        self.isInstantReplacementSectionExpanded.toggle()
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: self.isInstantReplacementSectionExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 16)
+        ThemedCard(style: .standard, hoverEffect: false) {
+            VStack(alignment: .leading, spacing: self.theme.metrics.spacing.lg) {
+                HStack(alignment: .center, spacing: self.theme.metrics.spacing.md) {
+                    self.settingsIconTile(systemName: "arrow.left.arrow.right")
 
-                        Text("Instant Replacement")
-                            .font(.headline)
-
-                        Spacer()
-
-                        if !self.entries.isEmpty {
-                            Text("\(self.entries.count)")
-                                .font(.caption.weight(.medium))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(.quaternary))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        // Add button (only when expanded and has entries)
-                        if self.isInstantReplacementSectionExpanded && !self.entries.isEmpty {
-                            Button {
-                                self.showAddSheet = true
-                            } label: {
-                                Image(systemName: "plus")
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text("Instant Replacement")
+                                .font(self.theme.typography.sectionTitle)
+                            if !self.entries.isEmpty {
+                                Text("(\(self.entries.count))")
+                                    .font(self.theme.typography.captionSmall)
+                                    .foregroundStyle(self.theme.palette.tertiaryText)
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
                         }
+                        Text("Replace phrases that are consistently transcribed incorrectly.")
+                            .font(self.theme.typography.caption)
+                            .foregroundStyle(self.theme.palette.secondaryText)
                     }
-                    .contentShape(Rectangle())
+
+                    Spacer()
+
+                    Button {
+                        self.showAddSheet = true
+                    } label: {
+                        Label("Add Replacement", systemImage: "plus")
+                    }
+                    .fluidButton(.accent, size: .small)
                 }
-                .buttonStyle(.plain)
 
-                if self.isInstantReplacementSectionExpanded {
-                    Divider()
-                        .padding(.vertical, 12)
-
-                    // Description
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Fix recurring transcription mistakes or create shortcuts for text you use often.")
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            self.instantReplacementExampleRow(
-                                label: "Common mistake",
-                                trigger: "fluid voice",
-                                replacement: "FluidVoice"
-                            )
-                            self.instantReplacementExampleRow(
-                                label: "Email",
-                                trigger: "email me",
-                                replacement: "you@example.com"
-                            )
-                            self.instantReplacementExampleRow(
-                                label: "Punctuation",
-                                trigger: "colon",
-                                replacement: ":"
-                            )
-                            self.instantReplacementExampleRow(
-                                label: "Punctuation",
-                                trigger: "exclamation",
-                                replacement: "!"
-                            )
-                        }
+                if self.entries.isEmpty {
+                    self.dictionaryEmptyState(
+                        title: "No replacements yet",
+                        detail: "Add a phrase and the text it should become."
+                    ) {
+                        self.showAddSheet = true
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, 12)
-
-                    // Features
-                    HStack(spacing: 12) {
-                        Label("Find-and-replace", systemImage: "arrow.left.arrow.right")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        Label("Instant apply", systemImage: "bolt.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        Label("Case insensitive", systemImage: "textformat")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.bottom, 12)
-
-                    // Content
-                    if self.entries.isEmpty {
-                        self.instantReplacementEmptyState
-                    } else {
-                        self.entriesListView
-                    }
+                } else {
+                    self.entriesListView
                 }
             }
-            .padding(14)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
-
-    private func instantReplacementExampleRow(label: String, trigger: String, replacement: String) -> some View {
-        HStack(spacing: 6) {
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(self.theme.palette.accent)
-                .frame(width: 108, alignment: .leading)
-
-            Text("\"\(trigger)\"")
-                .font(.caption2.monospaced())
-                .foregroundStyle(.primary)
-
-            Image(systemName: "arrow.right")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
-
-            Text("\"\(replacement)\"")
-                .font(.caption2.monospaced())
-                .foregroundStyle(.primary)
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.9)
-    }
-
-    // MARK: - Instant Replacement Empty State
-
-    private var instantReplacementEmptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "plus.circle.dashed")
-                .font(.system(size: 32))
-                .foregroundStyle(.tertiary)
-
-            Text("No entries yet")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Button {
-                self.showAddSheet = true
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                    Text("Add Entry")
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(self.theme.palette.accent)
-            .controlSize(.small)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-    }
-
-    // MARK: - Entries List
 
     private var entriesListView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: self.theme.metrics.spacing.sm) {
             ForEach(self.entries) { entry in
                 DictionaryEntryRow(
                     entry: entry,
@@ -269,164 +189,147 @@ struct CustomDictionaryView: View {
         }
     }
 
-    // MARK: - Section 2: Custom Words (Parakeet)
+    // MARK: - Custom Words
 
     private var aiPostProcessingSection: some View {
-        ThemedCard(hoverEffect: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                // Collapsible Header
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        self.isAISectionExpanded.toggle()
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: self.isAISectionExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 16)
+        ThemedCard(style: .standard, hoverEffect: false) {
+            VStack(alignment: .leading, spacing: self.theme.metrics.spacing.lg) {
+                HStack(alignment: .center, spacing: self.theme.metrics.spacing.md) {
+                    self.settingsIconTile(systemName: "character.book.closed")
 
-                        Text("Custom Words (Parakeet)")
-                            .font(.headline)
-
-                        Text("PARAKEET")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(self.theme.palette.accent.opacity(0.2)))
-                            .foregroundStyle(self.theme.palette.accent)
-
-                        Text("\(self.boostTerms.count)")
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(.quaternary))
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        if self.isAISectionExpanded && !self.boostTerms.isEmpty {
-                            Button {
-                                self.showAddBoostSheet = true
-                            } label: {
-                                Image(systemName: "plus")
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text("Custom Words")
+                                .font(self.theme.typography.sectionTitle)
+                            if !self.boostTerms.isEmpty {
+                                Text("(\(self.boostTerms.count))")
+                                    .font(self.theme.typography.captionSmall)
+                                    .foregroundStyle(self.theme.palette.tertiaryText)
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
                         }
+                        Text("Help the Parakeet voice engine recognize names, products, and uncommon terms.")
+                            .font(self.theme.typography.caption)
+                            .foregroundStyle(self.theme.palette.secondaryText)
                     }
-                    .contentShape(Rectangle())
+
+                    Spacer()
+
+                    Toggle("Boosting", isOn: self.$vocabBoostingEnabled)
+                        .font(self.theme.typography.captionStrong)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .help("Improve recognition of your custom words when using Parakeet.")
+                        .onChange(of: self.vocabBoostingEnabled) { _, newValue in
+                            SettingsStore.shared.vocabularyBoostingEnabled = newValue
+                        }
+
+                    Button {
+                        self.isBoostingInfoPresented.toggle()
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(SquareIconButtonStyle())
+                    .help("About Vocabulary Boosting")
+                    .popover(isPresented: self.$isBoostingInfoPresented, arrowEdge: .top) {
+                        self.boostingInfoPopover
+                    }
+
+                    Button {
+                        self.showAddBoostSheet = true
+                    } label: {
+                        Label("Add Word", systemImage: "plus")
+                    }
+                    .fluidButton(.accent, size: .small)
                 }
-                .buttonStyle(.plain)
 
-                if self.isAISectionExpanded {
-                    Divider()
-                        .padding(.vertical, 12)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Add names, product words, and uncommon terms in a simple form.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Text("Words from Instant Replacement are also used here automatically.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        Text("Applies when using a Parakeet voice engine.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        HStack {
-                            Toggle(isOn: self.$vocabBoostingEnabled) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Vocabulary Boosting")
-                                        .font(.subheadline.weight(.medium))
-                                    Text("Uses a secondary ML model to improve recognition of custom words. Disable if you experience issues.")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .onChange(of: self.vocabBoostingEnabled) { _, newValue in
-                                SettingsStore.shared.vocabularyBoostingEnabled = newValue
-                            }
-                        }
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(self.theme.palette.contentBackground.opacity(0.6))
-                        )
-
-                        if self.boostTerms.isEmpty {
-                            VStack(spacing: 10) {
-                                Image(systemName: "waveform.and.magnifyingglass")
-                                    .font(.system(size: 28))
-                                    .foregroundStyle(.tertiary)
-                                Text("No custom words yet")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Button {
-                                    self.showAddBoostSheet = true
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "plus")
-                                        Text("Add Custom Word")
-                                    }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(self.theme.palette.accent)
-                                .controlSize(.small)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                        } else {
-                            VStack(spacing: 8) {
-                                ForEach(Array(self.boostTerms.enumerated()), id: \.offset) { index, term in
-                                    BoostTermRow(
-                                        term: term,
-                                        onEdit: {
-                                            self.editingBoostTerm = EditableBoostTerm(index: index, term: term)
-                                        },
-                                        onDelete: {
-                                            self.deleteBoostTerm(at: index)
-                                        }
-                                    )
-                                }
-                            }
-
-                            HStack {
-                                Button {
-                                    self.showAddBoostSheet = true
-                                } label: {
-                                    Label("Add Word", systemImage: "plus")
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(self.theme.palette.accent)
-                                .controlSize(.small)
-
-                                Spacer()
-                            }
-                        }
-
-                        HStack {
-                            Image(systemName: self.boostHasError ? "xmark.circle.fill" : "checkmark.circle.fill")
-                                .foregroundStyle(self.boostHasError ? .red : .secondary)
-                            Text(self.boostStatusMessage)
-                                .font(.caption)
-                                .foregroundStyle(self.boostHasError ? .red : .secondary)
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(self.boostHasError ? Color.red.opacity(0.08) : self.theme.palette.contentBackground.opacity(0.6))
-                        )
+                if self.boostTerms.isEmpty {
+                    self.dictionaryEmptyState(
+                        title: "No custom words yet",
+                        detail: "Add a name or term that needs a little extra recognition help."
+                    ) {
+                        self.showAddBoostSheet = true
                     }
+                } else {
+                    VStack(spacing: self.theme.metrics.spacing.sm) {
+                        ForEach(Array(self.boostTerms.enumerated()), id: \.offset) { index, term in
+                            BoostTermRow(
+                                term: term,
+                                onEdit: {
+                                    self.editingBoostTerm = EditableBoostTerm(index: index, term: term)
+                                },
+                                onDelete: {
+                                    self.deleteBoostTerm(at: index)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if self.boostHasError {
+                    Label(self.boostStatusMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(self.theme.typography.caption)
+                        .foregroundStyle(self.theme.palette.warning)
                 }
             }
-            .padding(14)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var boostingInfoPopover: some View {
+        VStack(alignment: .leading, spacing: self.theme.metrics.spacing.sm) {
+            HStack(spacing: 8) {
+                Image(systemName: "testtube.2")
+                    .foregroundStyle(self.theme.palette.accent)
+                Text("Vocabulary Boosting · Alpha")
+                    .font(self.theme.typography.bodySmallStrong)
+            }
+
+            Text("Vocabulary Boosting is an experimental feature that helps Parakeet recognize your custom words.")
+                .font(self.theme.typography.caption)
+                .foregroundStyle(self.theme.palette.secondaryText)
+
+            Text("If recognition gets worse, the model behaves unexpectedly, or you notice other issues after enabling it, turn Boosting off.")
+                .font(self.theme.typography.caption)
+                .foregroundStyle(self.theme.palette.secondaryText)
+        }
+        .padding(self.theme.metrics.spacing.lg)
+        .frame(width: 310, alignment: .leading)
+    }
+
+    private func dictionaryEmptyState(
+        title: String,
+        detail: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: self.theme.metrics.spacing.sm) {
+            Image(systemName: "plus.circle")
+                .font(.title3)
+                .foregroundStyle(self.theme.palette.tertiaryText)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(self.theme.typography.bodySmallStrong)
+                Text(detail)
+                    .font(self.theme.typography.caption)
+                    .foregroundStyle(self.theme.palette.secondaryText)
+            }
+
+            Spacer()
+
+            Button("Add", action: action)
+                .fluidButton(.compact, size: .compact)
+        }
+        .padding(self.theme.metrics.spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: self.theme.metrics.corners.md, style: .continuous)
+                .fill(self.theme.palette.contentBackground.opacity(0.5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: self.theme.metrics.corners.md, style: .continuous)
+                        .stroke(self.theme.palette.cardBorder.opacity(0.25), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - Actions
@@ -459,6 +362,94 @@ struct CustomDictionaryView: View {
             self.boostStatusMessage = "Couldn't save custom words: \(error.localizedDescription)"
             self.boostHasError = true
         }
+    }
+
+    private func exportDictionary() {
+        do {
+            let panel = NSSavePanel()
+            panel.canCreateDirectories = true
+            panel.allowedContentTypes = [.json]
+            panel.nameFieldStringValue = DictionaryTransferService.shared.suggestedFilename()
+
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+
+            let document = try DictionaryTransferService.shared.makeExportDocument()
+            let data = try DictionaryTransferService.shared.encode(document)
+            try data.write(to: url, options: .atomic)
+
+            self.presentInfoAlert(
+                title: "Dictionary Exported",
+                message: "Saved \(document.replacements.count) replacement rules and \(document.customWords.count) custom words."
+            )
+        } catch {
+            self.presentErrorAlert(title: "Dictionary Export Failed", message: error.localizedDescription)
+        }
+    }
+
+    private func importDictionary() {
+        do {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = false
+            panel.canChooseFiles = true
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [.json]
+
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+
+            let data = try Data(contentsOf: url)
+            let document = try DictionaryTransferService.shared.decode(data)
+            guard let mode = self.confirmDictionaryImport(document) else { return }
+
+            let summary = try DictionaryTransferService.shared.restore(document, mode: mode)
+            self.entries = SettingsStore.shared.customDictionaryEntries
+            self.loadBoostTerms()
+
+            self.presentInfoAlert(
+                title: "Dictionary Imported",
+                message: "Now using \(summary.replacementCount) replacement rules and \(summary.customWordCount) custom words."
+            )
+        } catch {
+            self.presentErrorAlert(title: "Dictionary Import Failed", message: error.localizedDescription)
+        }
+    }
+
+    private func confirmDictionaryImport(_ document: DictionaryTransferDocument) -> DictionaryTransferImportMode? {
+        let confirm = NSAlert()
+        confirm.messageText = "Import this dictionary?"
+        confirm.informativeText = """
+        Found \(document.replacements.count) replacement rules and \(document.customWords.count) custom words.
+
+        Merge adds them to your current dictionary. Replace clears the current dictionary first.
+        """
+        confirm.alertStyle = .warning
+        confirm.addButton(withTitle: "Merge")
+        confirm.addButton(withTitle: "Replace")
+        confirm.addButton(withTitle: "Cancel")
+
+        switch confirm.runModal() {
+        case .alertFirstButtonReturn:
+            return .merge
+        case .alertSecondButtonReturn:
+            return .replace
+        default:
+            return nil
+        }
+    }
+
+    private func presentInfoAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.runModal()
+    }
+
+    private func presentErrorAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .critical
+        alert.runModal()
     }
 
     private func deleteBoostTerm(at index: Int) {
@@ -521,6 +512,14 @@ private enum BoostStrengthPreset: String, CaseIterable, Identifiable {
         }
     }
 
+    var badgeColor: Color {
+        switch self {
+        case .mild: return .blue
+        case .balanced: return Color.fluidGreen
+        case .strong: return .orange
+        }
+    }
+
     static func nearest(for weight: Float) -> Self {
         if weight < 8.5 { return .mild }
         if weight > 11.5 { return .strong }
@@ -538,46 +537,54 @@ struct BoostTermRow: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(self.term.text)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(self.theme.palette.accent)
-            }
+        HStack(spacing: self.theme.metrics.spacing.sm) {
+            Text(self.term.text)
+                .font(self.theme.typography.bodySmallStrong)
 
             Spacer()
 
             if let weight = self.term.weight {
-                Text("\(BoostStrengthPreset.nearest(for: weight).rawValue) priority")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(.quaternary))
-                    .foregroundStyle(.secondary)
+                let strength = BoostStrengthPreset.nearest(for: weight)
+                Text(strength.rawValue)
+                    .font(self.theme.typography.bodySmallStrong)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(strength.badgeColor.opacity(0.25)))
+                    .foregroundStyle(strength.badgeColor)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 2) {
                 Button {
                     self.onEdit()
                 } label: {
-                    Image(systemName: "pencil")
-                        .font(.caption2)
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+                .buttonStyle(SquareIconButtonStyle())
+                .help("Configure \(self.term.text)")
 
                 Button(role: .destructive) {
                     self.onDelete()
                 } label: {
                     Image(systemName: "trash")
-                        .font(.caption2)
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+                .buttonStyle(SquareIconButtonStyle(foreground: .red, borderColor: .red))
+                .help("Delete \(self.term.text)")
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.5)))
+        .padding(.horizontal, self.theme.metrics.spacing.md)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(self.theme.palette.contentBackground.opacity(0.52))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(self.theme.palette.cardBorder.opacity(0.28), lineWidth: 1)
+                )
+        )
     }
 }
 
@@ -773,65 +780,59 @@ struct DictionaryEntryRow: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            // Triggers (left side)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("When heard:")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-
-                FlowLayout(spacing: 4) {
-                    ForEach(self.entry.triggers, id: \.self) { trigger in
-                        Text(trigger)
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(.quaternary))
-                    }
+        HStack(alignment: .center, spacing: self.theme.metrics.spacing.sm) {
+            FlowLayout(spacing: 4) {
+                ForEach(self.entry.triggers, id: \.self) { trigger in
+                    Text(trigger)
+                        .font(self.theme.typography.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(.quaternary))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Arrow
             Image(systemName: "arrow.right")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(self.theme.typography.caption)
+                .foregroundStyle(self.theme.palette.tertiaryText)
 
-            // Replacement (right side)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Replace with:")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            Text(self.entry.replacement)
+                .font(self.theme.typography.bodySmallStrong)
+                .foregroundStyle(self.theme.palette.accent)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(self.entry.replacement)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(self.theme.palette.accent)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Actions
-            HStack(spacing: 6) {
+            HStack(spacing: 2) {
                 Button {
                     self.onEdit()
                 } label: {
-                    Image(systemName: "pencil")
-                        .font(.caption2)
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+                .buttonStyle(SquareIconButtonStyle())
+                .help("Configure replacement")
 
                 Button(role: .destructive) {
                     self.onDelete()
                 } label: {
                     Image(systemName: "trash")
-                        .font(.caption2)
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+                .buttonStyle(SquareIconButtonStyle(foreground: .red, borderColor: .red))
+                .help("Delete replacement")
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.5)))
+        .padding(.horizontal, self.theme.metrics.spacing.md)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(self.theme.palette.contentBackground.opacity(0.52))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(self.theme.palette.cardBorder.opacity(0.28), lineWidth: 1)
+                )
+        )
     }
 }
 
