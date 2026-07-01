@@ -54,6 +54,7 @@ final class TypingService {
     private static let pasteboardSessionSemaphore = DispatchSemaphore(value: 1)
     private static let pasteboardRestoreQueue = DispatchQueue(label: "TypingService.PasteboardRestore", qos: .utility)
     private static var focusSnapshot: FocusSnapshot?
+    private static let ghosttyBundleIdentifier = "com.mitchellh.ghostty"
 
     private var textInsertionMode: SettingsStore.TextInsertionMode {
         SettingsStore.shared.textInsertionMode
@@ -224,6 +225,16 @@ final class TypingService {
         return Self.isCurrentlyFocusedElement(element, expectedPID: pid)
     }
 
+    private func isGhosttyTarget(preferredTargetPID: pid_t?) -> Bool {
+        guard let preferredTargetPID, preferredTargetPID > 0,
+              let app = NSRunningApplication(processIdentifier: preferredTargetPID)
+        else {
+            return false
+        }
+
+        return app.bundleIdentifier == Self.ghosttyBundleIdentifier
+    }
+
     /// Best-effort: activates the app with the given PID, unless it's Fluid itself.
     @discardableResult
     static func activateApp(pid: pid_t) -> Bool {
@@ -340,6 +351,15 @@ final class TypingService {
     private func insertTextInstantly(_ text: String, preferredTargetPID: pid_t?) {
         self.log("[TypingService] insertTextInstantly called with \(text.count) characters")
         self.log("[TypingService] Attempting to type text: \"\(text.prefix(50))\(text.count > 50 ? "..." : "")\"")
+
+        if self.textInsertionMode == .standard, self.isGhosttyTarget(preferredTargetPID: preferredTargetPID) {
+            self.log("[TypingService] Ghostty target detected in standard mode; forcing Reliable Paste path")
+            if self.tryReliablePasteInsertion(text, preferredTargetPID: preferredTargetPID) {
+                self.log("[TypingService] SUCCESS: Ghostty Reliable Paste path completed")
+                return
+            }
+            self.log("[TypingService] Ghostty Reliable Paste path fell through to direct-typing fallbacks")
+        }
 
         if self.textInsertionMode == .reliablePaste {
             self.log("[TypingService] Reliable Paste mode enabled")
