@@ -240,7 +240,6 @@ struct ContentView: View {
 
     @State private var selectedSidebarItem: SidebarItem?
     @State private var previousSidebarItem: SidebarItem? = nil // Track previous for mode transitions
-    @State private var pendingDictionaryTrainingPrefill: DictionaryTrainingPrefill?
     @State private var playgroundUsed: Bool = SettingsStore.shared.playgroundUsed
     @State private var recordingAppInfo: (name: String, bundleId: String, windowTitle: String)? = nil
     @State private var recordingPrecedingText: String = ""
@@ -1013,9 +1012,6 @@ struct ContentView: View {
             self.selectedSidebarItem = .aiEnhancements
         case .history:
             self.selectedSidebarItem = .history
-        case let .customDictionaryTraining(prefill):
-            self.pendingDictionaryTrainingPrefill = prefill
-            self.selectedSidebarItem = .customDictionary
         }
     }
 
@@ -1312,12 +1308,7 @@ struct ContentView: View {
         case .meetingTools:
             return AnyView(self.meetingToolsView)
         case .customDictionary:
-            return AnyView(CustomDictionaryView(
-                trainingPrefill: self.pendingDictionaryTrainingPrefill,
-                onTrainingPrefillConsumed: {
-                    self.pendingDictionaryTrainingPrefill = nil
-                }
-            ))
+            return AnyView(CustomDictionaryView())
         case .stats:
             return AnyView(self.statsView)
         case .feedback:
@@ -3534,6 +3525,12 @@ struct ContentView: View {
     @discardableResult
     private func handleCancelShortcut() -> Bool {
         var handled = false
+
+        if DictionaryCorrectionOverlayController.shared.isPresented {
+            DebugLogger.shared.debug("Cancel shortcut: closing dictionary suggestion", source: "ContentView")
+            DictionaryCorrectionOverlayController.shared.hide()
+            return true
+        }
 
         if NotchOverlayManager.shared.isCommandOutputExpanded {
             DebugLogger.shared.debug("Cancel shortcut: closing expanded command notch", source: "ContentView")

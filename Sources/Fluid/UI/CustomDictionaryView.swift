@@ -15,9 +15,6 @@ struct CustomDictionaryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var appServices: AppServices
 
-    private let trainingPrefill: DictionaryTrainingPrefill?
-    private let onTrainingPrefillConsumed: () -> Void
-
     private var asr: ASRService { self.appServices.asr }
 
     @State private var entries: [SettingsStore.CustomDictionaryEntry] = SettingsStore.shared.customDictionaryEntries
@@ -62,17 +59,6 @@ struct CustomDictionaryView: View {
     @State private var editingPunctuationRuleID: UUID?
     @State private var punctuationAliasesText = ""
     @State private var punctuationSymbolText = ""
-    @State private var appliedTrainingPrefillID: UUID?
-    @State private var programmaticTrainingReplacementKey: String?
-
-    init(
-        trainingPrefill: DictionaryTrainingPrefill? = nil,
-        onTrainingPrefillConsumed: @escaping () -> Void = {}
-    ) {
-        self.trainingPrefill = trainingPrefill
-        self.onTrainingPrefillConsumed = onTrainingPrefillConsumed
-    }
-
     private var normalizedTrainingReplacement: String {
         self.trainingReplacement.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -305,13 +291,13 @@ struct CustomDictionaryView: View {
             }
         }
         .onAppear {
+            self.entries = SettingsStore.shared.customDictionaryEntries
             self.loadBoostTerms()
             self.automaticDictionaryLearningEnabled = SettingsStore.shared.automaticDictionaryLearningEnabled
             self.punctuationAutoConvertEnabled = SettingsStore.shared.autoConvertPunctuationEnabled
-            self.applyTrainingPrefillIfNeeded()
         }
-        .onChange(of: self.trainingPrefill?.id) { _, _ in
-            self.applyTrainingPrefillIfNeeded()
+        .onReceive(NotificationCenter.default.publisher(for: .parakeetVocabularyDidChange)) { _ in
+            self.entries = SettingsStore.shared.customDictionaryEntries
         }
         .onDisappear {
             guard self.isTrainingRecording else { return }
@@ -1607,40 +1593,6 @@ struct CustomDictionaryView: View {
         self.composerMode = mode
     }
 
-    private func applyTrainingPrefillIfNeeded() {
-        guard let trainingPrefill,
-              self.appliedTrainingPrefillID != trainingPrefill.id
-        else {
-            return
-        }
-
-        let intendedText = CustomDictionaryTrainingMerge.normalizedReplacement(trainingPrefill.intendedText)
-        let savedVariants = SettingsStore.shared.customDictionaryEntries
-            .filter { $0.replacement.caseInsensitiveCompare(intendedText) == .orderedSame }
-            .flatMap(\.triggers)
-        let variants = CustomDictionaryTrainingMerge.normalizedTriggers(
-            from: savedVariants + trainingPrefill.capturedVariants,
-            intendedReplacement: intendedText
-        )
-
-        self.appliedTrainingPrefillID = trainingPrefill.id
-        self.composerMode = .train
-        self.programmaticTrainingReplacementKey = intendedText.lowercased()
-        self.trainingReplacement = intendedText
-        self.trainingVariants = variants
-        self.trainingSampleCount = 0
-        self.lastTrainingOutput = ""
-        self.lastTrainingOutputIsCovered = false
-        self.consecutiveCoveredCaptures = 0
-        self.trainingStatusMessage = variants.isEmpty ? "" : "Correction loaded."
-        self.trainingHasError = false
-        self.isTrainingActive = !intendedText.isEmpty
-
-        DispatchQueue.main.async {
-            self.onTrainingPrefillConsumed()
-        }
-    }
-
     private func addManualReplacementIfValid() {
         guard self.canAddManualReplacement else { return }
         let entry = SettingsStore.CustomDictionaryEntry(
@@ -2003,12 +1955,6 @@ struct CustomDictionaryView: View {
     private func handleTrainingReplacementChange(oldValue: String, newValue: String) {
         let oldKey = CustomDictionaryTrainingMerge.normalizedReplacement(oldValue).lowercased()
         let newKey = CustomDictionaryTrainingMerge.normalizedReplacement(newValue).lowercased()
-        if let programmaticKey = self.programmaticTrainingReplacementKey {
-            self.programmaticTrainingReplacementKey = nil
-            if newKey == programmaticKey {
-                return
-            }
-        }
         guard oldKey != newKey else { return }
 
         self.trainingVariants = self.existingTrainingVariants(for: newValue)

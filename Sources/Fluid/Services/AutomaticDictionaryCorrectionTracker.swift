@@ -491,16 +491,7 @@ final class AutomaticDictionaryCorrectionTracker {
         self.stopObservation()
 
         guard let candidate, !self.isAlreadySaved(candidate) else { return }
-        DictionaryCorrectionOverlayController.shared.show(candidate: candidate) {
-            let prefill = DictionaryTrainingPrefill(
-                intendedText: candidate.correctedText,
-                capturedVariants: [candidate.heardText]
-            )
-            AppNavigationRouter.shared.request(
-                .customDictionaryTraining(prefill),
-                presentsMainWindow: true
-            )
-        }
+        DictionaryCorrectionOverlayController.shared.show(candidate: candidate)
     }
 
     private func isAlreadySaved(_ candidate: AutomaticDictionaryCorrectionCandidate) -> Bool {
