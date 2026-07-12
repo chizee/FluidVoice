@@ -17,6 +17,7 @@ final class DictionaryCorrectionOverlayController {
     private var session: AutomaticDictionaryTrainingSession?
     private var sessionCancellable: AnyCancellable?
     private var dismissTask: Task<Void, Never>?
+    private var outcomeHandler: ((AutomaticDictionarySuggestionOutcome) -> Void)?
     private var generation: UInt64 = 0
 
     private init() {}
@@ -25,11 +26,15 @@ final class DictionaryCorrectionOverlayController {
         self.panel?.isVisible == true
     }
 
-    func show(candidate: AutomaticDictionaryCorrectionCandidate) {
+    func show(
+        candidate: AutomaticDictionaryCorrectionCandidate,
+        onOutcome: @escaping (AutomaticDictionarySuggestionOutcome) -> Void
+    ) {
         self.generation &+= 1
         let currentGeneration = self.generation
         self.dismissTask?.cancel()
         self.session?.cancel()
+        self.outcomeHandler = onOutcome
 
         let session = AutomaticDictionaryTrainingSession(
             candidate: candidate,
@@ -39,6 +44,7 @@ final class DictionaryCorrectionOverlayController {
             self?.keepVisible()
         }
         session.onSuccess = { [weak self] in
+            self?.reportOutcome(.accepted)
             self?.scheduleSuccessDismissal()
         }
         self.session = session
@@ -47,6 +53,7 @@ final class DictionaryCorrectionOverlayController {
             session: session,
             displayDuration: Double(Self.displayDurationNanoseconds) / 1_000_000_000,
             onDismiss: { [weak self] in
+                self?.reportOutcome(.dismissed)
                 self?.hide()
             }
         )
@@ -84,6 +91,7 @@ final class DictionaryCorrectionOverlayController {
             else {
                 return
             }
+            self.reportOutcome(.timedOut)
             self.hide()
         }
     }
@@ -137,6 +145,13 @@ final class DictionaryCorrectionOverlayController {
         self.sessionCancellable?.cancel()
         self.sessionCancellable = nil
         self.session = nil
+        self.outcomeHandler = nil
+    }
+
+    private func reportOutcome(_ outcome: AutomaticDictionarySuggestionOutcome) {
+        guard let outcomeHandler = self.outcomeHandler else { return }
+        self.outcomeHandler = nil
+        outcomeHandler(outcome)
     }
 
     private func createPanel(rootView: AutomaticDictionaryCorrectionOverlayView) {

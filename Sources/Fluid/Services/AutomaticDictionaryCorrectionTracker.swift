@@ -101,6 +101,7 @@ enum AutomaticDictionaryCorrectionDetector {
         let corrected = self.cleanedCandidate((after as NSString).substring(with: newTokenRange))
         guard self.isValidCandidate(heard),
               self.isValidCandidate(corrected),
+              self.isMeaningfulCorrection(heard: heard, corrected: corrected),
               heard != corrected,
               heard.caseInsensitiveCompare(corrected) != .orderedSame,
               heard.count + corrected.count <= self.maxCombinedLength
@@ -190,6 +191,166 @@ enum AutomaticDictionaryCorrectionDetector {
 
         let words = value.split(whereSeparator: { $0.isWhitespace })
         return !words.isEmpty && words.count <= self.maxWords
+    }
+
+    private static func isMeaningfulCorrection(heard: String, corrected: String) -> Bool {
+        let heardCharacters = heard.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        let correctedCharacters = corrected.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        guard heardCharacters.count >= 2,
+              correctedCharacters.count >= 2,
+              heardCharacters.contains(where: { CharacterSet.letters.contains($0) }),
+              correctedCharacters.contains(where: { CharacterSet.letters.contains($0) })
+        else {
+            return false
+        }
+
+        let heardSemantic = String(String.UnicodeScalarView(heardCharacters)).lowercased()
+        let correctedSemantic = String(String.UnicodeScalarView(correctedCharacters)).lowercased()
+        return heardSemantic != correctedSemantic
+    }
+}
+
+struct DictionarySuggestionPolicyConfig {
+    var requiredOccurrences = 2
+    var occurrenceWindow: TimeInterval = 7 * 24 * 60 * 60
+    var globalCooldown: TimeInterval = 10 * 60
+    var dismissedPairCooldown: TimeInterval = 7 * 24 * 60 * 60
+    var maximumPairDismissals = 3
+    var maximumSessionIgnores = 3
+    var retentionDuration: TimeInterval = 30 * 24 * 60 * 60
+    var maximumStoredPairs = 200
+}
+
+enum AutomaticDictionarySuggestionOutcome {
+    case accepted
+    case dismissed
+    case timedOut
+}
+
+@MainActor
+final class AutomaticDictionarySuggestionPolicy {
+    static let shared = AutomaticDictionarySuggestionPolicy()
+
+    private struct PairRecord: Codable {
+        var heardText: String
+        var correctedText: String
+        var occurrences: [Date] = []
+        var lastShownAt: Date?
+        var dismissedUntil: Date?
+        var dismissalCount = 0
+        var isAccepted = false
+    }
+
+    private struct PersistedState: Codable {
+        var records: [String: PairRecord] = [:]
+        var lastShownAt: Date?
+    }
+
+    private static let defaultsKey = "AutomaticDictionarySuggestionPolicyStateV1"
+
+    private let defaults: UserDefaults
+    private let configuration: DictionarySuggestionPolicyConfig
+    private var state: PersistedState
+    private var sessionIgnoreCount = 0
+
+    init(
+        defaults: UserDefaults = .standard,
+        configuration: DictionarySuggestionPolicyConfig = .init()
+    ) {
+        self.defaults = defaults
+        self.configuration = configuration
+        if let data = defaults.data(forKey: Self.defaultsKey),
+           let state = try? JSONDecoder().decode(PersistedState.self, from: data)
+        {
+            self.state = state
+        } else {
+            self.state = PersistedState()
+        }
+    }
+
+    func shouldShow(_ candidate: AutomaticDictionaryCorrectionCandidate, now: Date = Date()) -> Bool {
+        self.prune(now: now)
+        let key = self.key(for: candidate)
+        var record = self.state.records[key] ?? PairRecord(
+            heardText: candidate.heardText,
+            correctedText: candidate.correctedText
+        )
+        record.occurrences.removeAll { now.timeIntervalSince($0) > self.configuration.occurrenceWindow }
+        record.occurrences.append(now)
+        self.state.records[key] = record
+        self.save()
+
+        guard !record.isAccepted,
+              record.dismissalCount < self.configuration.maximumPairDismissals,
+              record.dismissedUntil.map({ $0 <= now }) ?? true,
+              record.occurrences.count >= self.configuration.requiredOccurrences,
+              self.sessionIgnoreCount < self.configuration.maximumSessionIgnores,
+              self.state.lastShownAt.map({ now.timeIntervalSince($0) >= self.configuration.globalCooldown }) ?? true
+        else {
+            return false
+        }
+        return true
+    }
+
+    func markShown(_ candidate: AutomaticDictionaryCorrectionCandidate, now: Date = Date()) {
+        let key = self.key(for: candidate)
+        guard var record = self.state.records[key] else { return }
+        record.lastShownAt = now
+        self.state.records[key] = record
+        self.state.lastShownAt = now
+        self.save()
+    }
+
+    func record(
+        _ outcome: AutomaticDictionarySuggestionOutcome,
+        for candidate: AutomaticDictionaryCorrectionCandidate,
+        now: Date = Date()
+    ) {
+        let key = self.key(for: candidate)
+        guard var record = self.state.records[key] else { return }
+        switch outcome {
+        case .accepted:
+            record.isAccepted = true
+            record.dismissedUntil = nil
+        case .dismissed, .timedOut:
+            record.dismissalCount += 1
+            record.dismissedUntil = now.addingTimeInterval(self.configuration.dismissedPairCooldown)
+            self.sessionIgnoreCount += 1
+        }
+        self.state.records[key] = record
+        self.save()
+    }
+
+    private func key(for candidate: AutomaticDictionaryCorrectionCandidate) -> String {
+        "\(self.normalized(candidate.heardText))\u{1F}\(self.normalized(candidate.correctedText))"
+    }
+
+    private func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    private func prune(now: Date) {
+        self.state.records = self.state.records.filter { _, record in
+            let latestActivity = ([record.lastShownAt] + record.occurrences.map(Optional.some)).compactMap { $0 }.max()
+            return record.isAccepted || latestActivity.map {
+                now.timeIntervalSince($0) <= self.configuration.retentionDuration
+            } ?? false
+        }
+        if self.state.records.count > self.configuration.maximumStoredPairs {
+            let sortedKeys = self.state.records.keys.sorted {
+                (self.state.records[$0]?.lastShownAt ?? .distantPast) >
+                    (self.state.records[$1]?.lastShownAt ?? .distantPast)
+            }
+            let retainedKeys = Set(sortedKeys.prefix(self.configuration.maximumStoredPairs))
+            self.state.records = self.state.records.filter { retainedKeys.contains($0.key) }
+        }
+    }
+
+    private func save() {
+        guard let data = try? JSONEncoder().encode(self.state) else { return }
+        self.defaults.set(data, forKey: Self.defaultsKey)
     }
 }
 
@@ -391,6 +552,7 @@ final class AutomaticDictionaryCorrectionTracker {
     ) -> InsertionSeed? {
         guard let focus = self.focusedElementAndPID(),
               targetPID == nil || focus.pid == targetPID,
+              !self.isSecureTextInput(focus.element),
               let value = self.stringValue(of: focus.element),
               (value as NSString).length <= Self.maximumFieldLength,
               let selectedRange = self.selectedRange(of: focus.element),
@@ -490,17 +652,29 @@ final class AutomaticDictionaryCorrectionTracker {
         )
         self.stopObservation()
 
-        guard let candidate, !self.isAlreadySaved(candidate) else { return }
-        DictionaryCorrectionOverlayController.shared.show(candidate: candidate)
+        guard let candidate,
+              SettingsStore.shared.automaticDictionaryLearningEnabled,
+              !SettingsStore.shared.shouldShowOnboarding,
+              !self.isAlreadySaved(candidate),
+              !AppServices.shared.asr.isRunning,
+              !DictionaryCorrectionOverlayController.shared.isPresented,
+              AutomaticDictionarySuggestionPolicy.shared.shouldShow(candidate)
+        else {
+            return
+        }
+
+        AutomaticDictionarySuggestionPolicy.shared.markShown(candidate)
+        DictionaryCorrectionOverlayController.shared.show(candidate: candidate) { outcome in
+            AutomaticDictionarySuggestionPolicy.shared.record(outcome, for: candidate)
+        }
     }
 
     private func isAlreadySaved(_ candidate: AutomaticDictionaryCorrectionCandidate) -> Bool {
         let trigger = candidate.heardText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return SettingsStore.shared.customDictionaryEntries.contains { entry in
-            entry.replacement.caseInsensitiveCompare(candidate.correctedText) == .orderedSame &&
-                entry.triggers.contains {
-                    $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trigger
-                }
+            entry.triggers.contains {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trigger
+            }
         }
     }
 
@@ -509,6 +683,13 @@ final class AutomaticDictionaryCorrectionTracker {
         let result = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value)
         guard result == .success else { return nil }
         return value as? String
+    }
+
+    private func isSecureTextInput(_ element: AXUIElement) -> Bool {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &value)
+        guard result == .success, let subrole = value as? String else { return false }
+        return subrole == (kAXSecureTextFieldSubrole as String) || subrole.localizedCaseInsensitiveContains("secure")
     }
 
     private func selectedRange(of element: AXUIElement) -> NSRange? {
