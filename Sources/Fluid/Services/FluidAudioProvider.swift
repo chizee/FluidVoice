@@ -10,6 +10,15 @@ final class FluidAudioProvider: TranscriptionProvider {
         let label: String
     }
 
+    static func dictionaryLabels(
+        from entries: [SettingsStore.CustomDictionaryEntry]
+    ) -> [UUID: String] {
+        Dictionary(
+            entries.map { ($0.id, $0.replacement) },
+            uniquingKeysWith: { _, last in last }
+        )
+    }
+
     let name = "FluidAudio (Apple Silicon Optimized)"
 
     /// Whether this provider is supported on the current system.
@@ -267,8 +276,8 @@ final class FluidAudioProvider: TranscriptionProvider {
 
     private func transcribeFinalResult(_ samples: [Float], manager: AsrManager) async throws -> ASRTranscriptionResult {
         let matchingEnabled = SettingsStore.shared.pronunciationMatchingEnabled && samples.count <= 16_000 * 15
-        let dictionaryLabels = Dictionary(
-            uniqueKeysWithValues: SettingsStore.shared.customDictionaryEntries.map { ($0.id, $0.replacement) }
+        let dictionaryLabels = Self.dictionaryLabels(
+            from: SettingsStore.shared.customDictionaryEntries
         )
         let profiles: [PronunciationDictionaryProfile]
         if matchingEnabled {

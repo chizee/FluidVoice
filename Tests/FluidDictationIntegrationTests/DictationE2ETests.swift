@@ -309,6 +309,16 @@ final class DictationE2ETests: XCTestCase {
         }
     }
 
+    func testPronunciationDictionaryLabelsUseLastDuplicateEntry() {
+        let id = UUID()
+        let labels = FluidAudioProvider.dictionaryLabels(from: [
+            SettingsStore.CustomDictionaryEntry(id: id, triggers: ["old"], replacement: "Old"),
+            SettingsStore.CustomDictionaryEntry(id: id, triggers: ["new"], replacement: "New"),
+        ])
+
+        XCTAssertEqual(labels, [id: "New"])
+    }
+
     func testCustomDictionaryReplacementMatchesPunctuationTriggers() {
         defer { ASRService.invalidateDictionaryCache() }
         let entry = SettingsStore.CustomDictionaryEntry(
