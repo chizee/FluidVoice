@@ -88,6 +88,7 @@ struct SettingsBackupPayload: Codable, Equatable {
     let contextAwareCapitalizationEnabled: Bool?
     let pauseMediaDuringTranscription: Bool
     let automaticDictionaryLearningEnabled: Bool?
+    let pronunciationMatchingEnabled: Bool?
     let vocabularyBoostingEnabled: Bool
     let customDictionaryEntries: [SettingsStore.CustomDictionaryEntry]
     let selectedDictationPromptID: String?
@@ -108,6 +109,9 @@ struct AppBackupDocument: Codable, Equatable {
     let promptProfiles: [SettingsStore.DictationPromptProfile]
     let appPromptBindings: [SettingsStore.AppPromptBinding]
     let transcriptionHistory: [TranscriptionHistoryEntry]
+    // Optional so backups created before pronunciation matching still decode.
+    // swiftlint:disable:next discouraged_optional_collection
+    let pronunciationProfiles: [PronunciationDictionaryProfile]?
 }
 
 enum BackupServiceError: LocalizedError {
@@ -124,20 +128,23 @@ enum BackupServiceError: LocalizedError {
     }
 }
 
+@MainActor
 final class BackupService {
     static let shared = BackupService()
 
     private init() {}
 
-    func makeBackupDocument() -> AppBackupDocument {
-        AppBackupDocument(
+    func makeBackupDocument() async -> AppBackupDocument {
+        let pronunciationProfiles = await PronunciationDictionaryStore.shared.allProfiles()
+        return AppBackupDocument(
             schemaVersion: .current,
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown",
             exportedAt: Date(),
             settings: SettingsStore.shared.makeBackupPayload(),
             promptProfiles: SettingsStore.shared.dictationPromptProfiles,
             appPromptBindings: SettingsStore.shared.appPromptBindings,
-            transcriptionHistory: TranscriptionHistoryStore.shared.makeBackupPayload()
+            transcriptionHistory: TranscriptionHistoryStore.shared.makeBackupPayload(),
+            pronunciationProfiles: pronunciationProfiles
         )
     }
 
@@ -164,8 +171,11 @@ final class BackupService {
         }
     }
 
-    func restore(_ document: AppBackupDocument) throws {
+    func restore(_ document: AppBackupDocument) async throws {
         try self.validate(document)
+        if let pronunciationProfiles = document.pronunciationProfiles {
+            try await PronunciationDictionaryStore.shared.replaceAllProfiles(pronunciationProfiles)
+        }
         SettingsStore.shared.restore(
             from: document.settings,
             promptProfiles: document.promptProfiles,

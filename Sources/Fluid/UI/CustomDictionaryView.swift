@@ -1820,6 +1820,7 @@ struct CustomDictionaryView: View {
         let transcript = await self.asr.stop(forDictionaryTraining: true)
         self.isTrainingProcessing = false
         if self.pronunciationMatchingEnabled,
+           CustomDictionaryTrainingMerge.normalizedTrigger(transcript) != nil,
            let enrollment = self.asr.lastDictionaryTrainingResult?.pronunciationEnrollment
         {
             self.trainingPronunciationEnrollments.append(enrollment)

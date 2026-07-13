@@ -1,12 +1,12 @@
 import Foundation
 
-struct PronunciationEnrollmentCapture: Codable, Sendable {
+struct PronunciationEnrollmentCapture: Codable, Equatable, Sendable {
     let values: [Float]
     let sourceFrameCount: Int
     let modelKey: String
 }
 
-struct PronunciationDictionaryProfile: Codable, Identifiable, Sendable {
+struct PronunciationDictionaryProfile: Codable, Equatable, Identifiable, Sendable {
     let dictionaryEntryID: UUID
     var label: String
     let modelKey: String
@@ -45,6 +45,15 @@ actor PronunciationDictionaryStore {
         self.fileURL = appURL.appendingPathComponent("pronunciation-dictionary-v1.json")
     }
 
+    init(fileURL: URL) {
+        self.fileURL = fileURL
+    }
+
+    func allProfiles() -> [PronunciationDictionaryProfile] {
+        self.loadIfNeeded()
+        return self.document?.profiles ?? []
+    }
+
     func profiles(modelKey: String) -> [PronunciationDictionaryProfile] {
         self.loadIfNeeded()
         return self.document?.profiles.filter { $0.modelKey == modelKey } ?? []
@@ -69,19 +78,40 @@ actor PronunciationDictionaryStore {
         }
         self.loadIfNeeded()
         var profiles = self.document?.profiles ?? []
+        let existingIndex = profiles.firstIndex(where: {
+            $0.dictionaryEntryID == dictionaryEntryID && $0.modelKey == modelKey
+        })
+        let existingEnrollments = existingIndex.map { profiles[$0].enrollments } ?? []
+        let combinedEnrollments = existingEnrollments + enrollments
+        guard combinedEnrollments.allSatisfy({
+            $0.modelKey == modelKey && $0.values.count == first.values.count
+        }) else {
+            throw PronunciationDictionaryStoreError.inconsistentEnrollment
+        }
         let profile = PronunciationDictionaryProfile(
             dictionaryEntryID: dictionaryEntryID,
             label: label,
             modelKey: modelKey,
             hiddenSize: first.values.count,
-            enrollments: Array(enrollments.suffix(10))
+            enrollments: Array(combinedEnrollments.suffix(10))
         )
-        if let index = profiles.firstIndex(where: {
-            $0.dictionaryEntryID == dictionaryEntryID && $0.modelKey == modelKey
-        }) {
+        if let index = existingIndex {
             profiles[index] = profile
         } else {
             profiles.append(profile)
+        }
+        try self.persist(Document(version: 1, profiles: profiles))
+    }
+
+    func replaceAllProfiles(_ profiles: [PronunciationDictionaryProfile]) throws {
+        guard profiles.allSatisfy({ profile in
+            profile.hiddenSize > 0 &&
+                !profile.enrollments.isEmpty &&
+                profile.enrollments.allSatisfy {
+                    $0.modelKey == profile.modelKey && $0.values.count == profile.hiddenSize
+                }
+        }) else {
+            throw PronunciationDictionaryStoreError.inconsistentEnrollment
         }
         try self.persist(Document(version: 1, profiles: profiles))
     }

@@ -797,6 +797,67 @@ final class DictationE2ETests: XCTestCase {
         }
     }
 
+    func testPronunciationStoreRetainsPriorEnrollmentsWhenRetrained() async throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PronunciationStore-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let store = PronunciationDictionaryStore(fileURL: fileURL)
+        let entryID = UUID()
+
+        let initialEnrollments = (0 ..< 8).map { value in
+            PronunciationEnrollmentCapture(
+                values: [Float(value), Float(value)],
+                sourceFrameCount: 1,
+                modelKey: "model-a"
+            )
+        }
+        let retrainedEnrollments = (8 ..< 13).map { value in
+            PronunciationEnrollmentCapture(
+                values: [Float(value), Float(value)],
+                sourceFrameCount: 1,
+                modelKey: "model-a"
+            )
+        }
+
+        try await store.upsert(
+            dictionaryEntryID: entryID,
+            label: "Barath",
+            modelKey: "model-a",
+            enrollments: initialEnrollments
+        )
+        try await store.upsert(
+            dictionaryEntryID: entryID,
+            label: "Barath",
+            modelKey: "model-a",
+            enrollments: retrainedEnrollments
+        )
+
+        let profiles = await store.profiles(modelKey: "model-a")
+        XCTAssertEqual(profiles.count, 1)
+        XCTAssertEqual(profiles.first?.enrollments.compactMap(\.values.first), (3 ..< 13).map { Float($0) })
+    }
+
+    func testPronunciationStoreRestoreRejectsMalformedProfiles() async {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PronunciationStore-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let store = PronunciationDictionaryStore(fileURL: fileURL)
+        let malformedProfile = PronunciationDictionaryProfile(
+            dictionaryEntryID: UUID(),
+            label: "Barath",
+            modelKey: "model-a",
+            hiddenSize: 2,
+            enrollments: [PronunciationEnrollmentCapture(values: [1], sourceFrameCount: 1, modelKey: "model-a")]
+        )
+
+        do {
+            try await store.replaceAllProfiles([malformedProfile])
+            XCTFail("Expected malformed profile validation to fail")
+        } catch {
+            XCTAssertEqual(error as? PronunciationDictionaryStoreError, .inconsistentEnrollment)
+        }
+    }
+
     func testProgressiveDownloaderRetainsFileByMovingIt() throws {
         let source = FileManager.default.temporaryDirectory
             .appendingPathComponent("FluidVoiceDownloadSource-\(UUID().uuidString)")

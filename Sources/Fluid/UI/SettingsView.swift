@@ -1606,6 +1606,10 @@ struct SettingsView: View {
     }
 
     private func exportBackup() {
+        Task { await self.performBackupExport() }
+    }
+
+    private func performBackupExport() async {
         do {
             let panel = NSSavePanel()
             panel.canCreateDirectories = true
@@ -1614,7 +1618,7 @@ struct SettingsView: View {
 
             guard panel.runModal() == .OK, let url = panel.url else { return }
 
-            let document = BackupService.shared.makeBackupDocument()
+            let document = await BackupService.shared.makeBackupDocument()
             let data = try BackupService.shared.encode(document)
             try data.write(to: url, options: .atomic)
 
@@ -1631,6 +1635,10 @@ struct SettingsView: View {
     }
 
     private func importBackup() {
+        Task { await self.performBackupImport() }
+    }
+
+    private func performBackupImport() async {
         do {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = false
@@ -1661,7 +1669,7 @@ struct SettingsView: View {
 
             guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
-            try BackupService.shared.restore(document)
+            try await BackupService.shared.restore(document)
             self.syncLocalSettingsAfterBackupRestore()
 
             self.presentInfoAlert(

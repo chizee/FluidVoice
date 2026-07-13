@@ -2969,6 +2969,7 @@ final class SettingsStore: ObservableObject {
             contextAwareCapitalizationEnabled: self.contextAwareCapitalizationEnabled,
             pauseMediaDuringTranscription: self.pauseMediaDuringTranscription,
             automaticDictionaryLearningEnabled: self.automaticDictionaryLearningEnabled,
+            pronunciationMatchingEnabled: self.pronunciationMatchingEnabled,
             vocabularyBoostingEnabled: self.vocabularyBoostingEnabled,
             customDictionaryEntries: self.customDictionaryEntries,
             selectedDictationPromptID: self.selectedDictationPromptID,
@@ -3098,6 +3099,9 @@ final class SettingsStore: ObservableObject {
         self.pauseMediaDuringTranscription = payload.pauseMediaDuringTranscription
         if let automaticDictionaryLearningEnabled = payload.automaticDictionaryLearningEnabled {
             self.automaticDictionaryLearningEnabled = automaticDictionaryLearningEnabled
+        }
+        if let pronunciationMatchingEnabled = payload.pronunciationMatchingEnabled {
+            self.pronunciationMatchingEnabled = pronunciationMatchingEnabled
         }
         self.vocabularyBoostingEnabled = payload.vocabularyBoostingEnabled
         self.customDictionaryEntries = payload.customDictionaryEntries
