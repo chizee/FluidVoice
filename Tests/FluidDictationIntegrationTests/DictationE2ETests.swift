@@ -1599,6 +1599,21 @@ final class DictationE2ETests: XCTestCase {
         }
     }
 
+    func testDictationProviderRouteReturnsEmptyRouteForUnverifiedPrivateAI() {
+        self.withPromptAndProviderSettingsRestored {
+            let settings = SettingsStore.shared
+            settings.verifiedProviderFingerprints = [:]
+
+            let route = DictationProviderRoute.privateAIRoute(settings: settings)
+
+            XCTAssertEqual(
+                route,
+                DictationProviderRoute(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
+            )
+            XCTAssertFalse(route.usesPrivateAI)
+        }
+    }
+
     func testDictationProviderRouteUsesAppBoundPromptConfiguration() {
         self.withRestoredDefaults(
             keys: [
@@ -2184,6 +2199,7 @@ final class DictationE2ETests: XCTestCase {
                 self.selectedProviderIDKey,
                 self.availableModelsByProviderKey,
                 self.selectedModelByProviderKey,
+                self.verifiedProviderFingerprintsKey,
                 self.privateAISelectedModelIDKey,
             ],
             run: run

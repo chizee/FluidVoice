@@ -30,16 +30,8 @@ struct DictationProviderRoute: Equatable {
             if selection == .off {
                 return Self(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
             }
-            if selection == .privateAI,
-               let modelID = PrivateAIProviderPromptFormat.verifiedModelID(settings: settings)
-            {
-                return Self(
-                    providerID: PrivateAIProviderFeature.shared.providerID,
-                    providerKey: PrivateAIProviderFeature.shared.providerID,
-                    baseURL: ModelRepository.shared.defaultBaseURL(for: PrivateAIProviderFeature.shared.providerID),
-                    model: modelID,
-                    apiKey: ""
-                )
+            if selection == .privateAI {
+                return self.privateAIRoute(settings: settings)
             }
 
             let configuration = settings.dictationPromptConfiguration(for: selection)
@@ -87,6 +79,19 @@ struct DictationProviderRoute: Equatable {
             baseURL: "",
             model: configuredModel ?? selectedModels[selectedProviderID] ?? "",
             apiKey: providerKeys[selectedProviderID] ?? ""
+        )
+    }
+
+    static func privateAIRoute(settings: SettingsStore) -> Self {
+        guard let modelID = PrivateAIProviderPromptFormat.verifiedModelID(settings: settings) else {
+            return Self(providerID: "", providerKey: "", baseURL: "", model: "", apiKey: "")
+        }
+        return Self(
+            providerID: PrivateAIProviderFeature.shared.providerID,
+            providerKey: PrivateAIProviderFeature.shared.providerID,
+            baseURL: ModelRepository.shared.defaultBaseURL(for: PrivateAIProviderFeature.shared.providerID),
+            model: modelID,
+            apiKey: ""
         )
     }
 
