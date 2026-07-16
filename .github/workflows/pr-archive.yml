@@ -1,7 +1,9 @@
 name: PR Archive
 
 on:
-  pull_request_target:
+  # Repository Settings > Actions must require approval for all external
+  # contributors. This keeps fork PR builds read-only and secretless.
+  pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -18,8 +20,6 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: macos-latest
     timeout-minutes: 45
-    environment:
-      name: ${{ contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) && 'pr-archive-auto' || 'pr-archive-approval' }}
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
@@ -29,28 +29,23 @@ jobs:
       BUNDLE_IDENTIFIER: com.FluidApp.app.pr${{ github.event.pull_request.number }}
 
     steps:
-      - name: Verify outside-contributor approval gate
-        if: ${{ !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) }}
-        env:
-          APPROVAL_GATE_CONFIGURED: ${{ vars.PR_ARCHIVE_APPROVAL_CONFIGURED }}
+      - name: Validate PR merge commit
         run: |
-          if [[ "$APPROVAL_GATE_CONFIGURED" != "true" ]]; then
-            echo "The pr-archive-approval environment is not fully configured." >&2
-            echo "Add the repository owner and write-access collaborators as" >&2
-            echo "required reviewers, then set the environment's" >&2
-            echo "PR_ARCHIVE_APPROVAL_CONFIGURED environment variable to true." >&2
+          if [[ ! "$PR_MERGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "GitHub has not produced a merge commit for PR #$PR_NUMBER." >&2
+            echo "Resolve merge conflicts or rerun the workflow after GitHub computes it." >&2
             exit 1
           fi
 
       - name: Checkout PR merge commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 1
           persist-credentials: false
 
       - name: Set up Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: latest-stable
 
@@ -196,7 +191,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload PR archive artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.package.outputs.artifact-name }}
           path: ${{ steps.package.outputs.artifact-path }}
