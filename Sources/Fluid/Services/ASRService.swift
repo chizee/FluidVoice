@@ -103,7 +103,9 @@ final class ASRService: ObservableObject {
     private(set) var lastDictionaryTrainingResult: ASRTranscriptionResult?
     private(set) var dictionaryTrainingAudioGeneration = 0
 
-    private var isStarting: Bool = false // Guard against re-entrant start() calls
+    private(set) var isStarting: Bool = false // Guard against re-entrant start() calls
+    private var audioCaptureStartWaiters: [CheckedContinuation<Void, Never>] = []
+    var isRunningOrStarting: Bool { self.isRunning || self.isStarting }
     private var hasCompletedFirstTranscription: Bool = false // Track if model has warmed up with first transcription
     private var lastBoostHitTerm: String?
     private var hasPendingParakeetVocabularyReload: Bool = false
@@ -1332,7 +1334,7 @@ final class ASRService: ObservableObject {
             return
         }
         self.isStarting = true
-        defer { self.isStarting = false }
+        defer { self.finishAudioCaptureStart() }
 
         // Reset media pause state for this session
         self.didPauseMediaForThisSession = false
@@ -1456,6 +1458,24 @@ final class ASRService: ObservableObject {
                 userInfo: ["errorMessage": errorMessage]
             )
         }
+    }
+
+    func waitForPendingStart() async {
+        guard self.isStarting else { return }
+        await withCheckedContinuation { continuation in
+            if self.isStarting {
+                self.audioCaptureStartWaiters.append(continuation)
+            } else {
+                continuation.resume()
+            }
+        }
+    }
+
+    private func finishAudioCaptureStart() {
+        self.isStarting = false
+        let waiters = self.audioCaptureStartWaiters
+        self.audioCaptureStartWaiters.removeAll(keepingCapacity: false)
+        waiters.forEach { $0.resume() }
     }
 
     /// Stops the recording session and returns the transcribed text.
@@ -1844,6 +1864,9 @@ final class ASRService: ObservableObject {
     }
 
     func stopWithoutTranscription() async {
+        if self.isStarting, self.isRunning == false {
+            await self.waitForPendingStart()
+        }
         guard self.isRunning else { return }
         defer {
             self.applyPendingParakeetVocabularyReloadIfNeeded()
